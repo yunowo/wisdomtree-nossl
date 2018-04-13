@@ -26,7 +26,6 @@ class MainHook : IXposedHookLoadPackage {
                     findAndHookMethod("com.able.wisdomtree.rsa.Base64Utils", context.classLoader, "decode", String::class.java, base64Hook)
                 }
             })
-
         } catch (t: Throwable) {
             XposedBridge.log(t)
         }
@@ -64,13 +63,49 @@ class MainHook : IXposedHookLoadPackage {
             super.beforeHookedMethod(param)
             try {
                 param ?: return
-                XposedBridge.log("Decode: " + param.args[0])
-                // throw Exception()
+                XposedBridge.log("Decoding: " + param.args[0])
+                Thread.currentThread().stackTrace.forEach { XposedBridge.log(it.toString()) }
+            } catch (t: Throwable) {
+                XposedBridge.log(t)
+            }
+        }
+
+        override fun afterHookedMethod(param: MethodHookParam?) {
+            super.afterHookedMethod(param)
+            try {
+                param ?: return
+                if (isUTF8(param.result as ByteArray))
+                    XposedBridge.log("Decoded: " + String(param.result as ByteArray))
             } catch (t: Throwable) {
                 XposedBridge.log(t)
             }
         }
     }
 
+    companion object {
+        fun isUTF8(bytes: ByteArray): Boolean {
+            var expectedLength = 0
+            var i = 0
+            while (i < bytes.size) {
+                val c = bytes[i].toInt()
+                expectedLength = when {
+                    c and 128 == 0 -> 1
+                    c and 224 == 192 -> 2
+                    c and 240 == 224 -> 3
+                    c and 248 == 240 -> 4
+                    c and 252 == 248 -> 5
+                    c and 254 == 252 -> 6
+                    else -> return false
+                }
+
+                while (--expectedLength > 0) {
+                    if (++i >= bytes.size) return false
+                    if (c and 192 != 128) return false
+                }
+                i++
+            }
+            return true
+        }
+    }
 
 }
